@@ -16,9 +16,8 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../../../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
-import { Search, Brain, Plus, Trash2, Clock, Database, Sparkles, AlertCircle, Upload } from "lucide-react";
+import { Search, Brain, Plus, Trash2, Clock, Database, Sparkles, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import ChatGPTImporter from "../../../components/ChatGPTImporter";
 
 const createSchema = z.object({
   type: z.string().min(1, "Type is required"),
@@ -84,7 +83,7 @@ export default function MemoriesPage() {
       await createMemory({ 
         text: data.text, 
         type: data.type, 
-        meta_data 
+        metadata: meta_data 
       });
       toast.success("Memory created successfully");
       reset();
@@ -275,14 +274,10 @@ export default function MemoriesPage() {
 
       {/* Main Content */}
       <Tabs defaultValue="memories" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
           <TabsTrigger value="memories" className="gap-2">
             <Brain className="h-4 w-4" />
             All Memories
-          </TabsTrigger>
-          <TabsTrigger value="import" className="gap-2">
-            <Upload className="h-4 w-4" />
-            Import
           </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2">
             <Sparkles className="h-4 w-4" />
@@ -386,9 +381,7 @@ export default function MemoriesPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="import" className="space-y-6">
-          <ChatGPTImporter />
-        </TabsContent>
+
 
         <TabsContent value="analytics" className="space-y-6">
           <Card>

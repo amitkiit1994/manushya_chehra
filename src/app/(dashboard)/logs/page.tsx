@@ -52,7 +52,6 @@ export default function LogsPage() {
       'read': 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
       'search': 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
       'login': 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400',
-      'bulk_import': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-400',
     };
     return colors[action.toLowerCase() as keyof typeof colors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
   };

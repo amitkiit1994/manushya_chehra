@@ -79,6 +79,25 @@ export const createIdentity = async (external_id: string, role: string = 'agent'
   return res.data;
 };
 
+export const getCurrentIdentity = async (): Promise<Identity> => {
+  const res = await api.get<Identity>('/v1/identity/me');
+  return res.data;
+};
+
+export const updateCurrentIdentity = async (updates: { role?: string; claims?: Record<string, any>; is_active?: boolean }): Promise<Identity> => {
+  const res = await api.put<Identity>('/v1/identity/me', updates);
+  return res.data;
+};
+
+export const getIdentity = async (id: string): Promise<Identity> => {
+  const res = await api.get<Identity>(`/v1/identity/${id}`);
+  return res.data;
+};
+
+export const deleteIdentity = async (id: string): Promise<void> => {
+  await api.delete(`/v1/identity/${id}`);
+};
+
 // Memories
 export const getMemories = async (): Promise<Memory[]> => {
   const res = await api.get<Memory[]>('/v1/memory/');
@@ -90,13 +109,23 @@ export const searchMemories = async (query: string): Promise<Memory[]> => {
   return res.data;
 };
 
-export const createMemory = async (memory: { text: string; type: string; meta_data?: Record<string, any> }): Promise<Memory> => {
+export const createMemory = async (memory: { text: string; type: string; metadata?: Record<string, any>; ttl_days?: number }): Promise<Memory> => {
   const res = await api.post<Memory>('/v1/memory/', memory);
   return res.data;
 };
 
-export const deleteMemory = async (id: string): Promise<void> => {
-  await api.delete(`/v1/memory/${id}/`);
+export const getMemory = async (id: string): Promise<Memory> => {
+  const res = await api.get<Memory>(`/v1/memory/${id}`);
+  return res.data;
+};
+
+export const updateMemory = async (id: string, updates: { text?: string; type?: string; metadata?: Record<string, any>; ttl_days?: number }): Promise<Memory> => {
+  const res = await api.put<Memory>(`/v1/memory/${id}`, updates);
+  return res.data;
+};
+
+export const deleteMemory = async (id: string, hardDelete: boolean = false): Promise<void> => {
+  await api.delete(`/v1/memory/${id}?hard_delete=${hardDelete}`);
 };
 
 // Policies
@@ -105,8 +134,27 @@ export const getPolicies = async (): Promise<Policy[]> => {
   return res.data;
 };
 
-export const createPolicy = async (policy: Partial<Policy>): Promise<Policy> => {
+export const createPolicy = async (policy: { role: string; rule: Record<string, any>; description?: string; priority?: number; is_active?: boolean }): Promise<Policy> => {
   const res = await api.post<Policy>('/v1/policy/', policy);
+  return res.data;
+};
+
+export const getPolicy = async (id: string): Promise<Policy> => {
+  const res = await api.get<Policy>(`/v1/policy/${id}`);
+  return res.data;
+};
+
+export const updatePolicy = async (id: string, updates: { rule?: Record<string, any>; description?: string; priority?: number; is_active?: boolean }): Promise<Policy> => {
+  const res = await api.put<Policy>(`/v1/policy/${id}`, updates);
+  return res.data;
+};
+
+export const deletePolicy = async (id: string): Promise<void> => {
+  await api.delete(`/v1/policy/${id}`);
+};
+
+export const testPolicy = async (role: string, action: string, resource: string, context: Record<string, any>): Promise<any> => {
+  const res = await api.post(`/v1/policy/test?role=${role}&action=${action}&resource=${resource}`, context);
   return res.data;
 };
 

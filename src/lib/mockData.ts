@@ -123,21 +123,7 @@ export const mockAuditLogs: AuditLog[] = [
       created_via: "api_endpoint"
     }
   },
-  {
-    id: "log_010",
-    timestamp: "2025-07-03T22:55:20.012Z",
-    actor_identity: "frontend_test",
-    action: "bulk_import",
-    resource_type: "memory",
-    resource_id: "import_batch_001",
-    metadata: {
-      import_source: "chatgpt_export",
-      total_conversations: 15,
-      successful_imports: 12,
-      failed_imports: 3,
-      processing_time: "2.3s"
-    }
-  },
+
   {
     id: "log_011",
     timestamp: "2025-07-03T22:52:33.456Z",

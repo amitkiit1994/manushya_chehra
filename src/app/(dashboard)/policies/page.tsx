@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getPolicies, createPolicy } from "../../../lib/api";
+import { getPolicies, createPolicy, updatePolicy, deletePolicy, testPolicy } from "../../../lib/api";
 import type { Policy } from "../../../lib/types";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,12 +17,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
-import { Shield, Plus, Clock, FileText, Sparkles, AlertTriangle, CheckCircle2, Eye, Edit } from "lucide-react";
+import { Switch } from "../../../components/ui/switch";
+import { Shield, Plus, Clock, FileText, Sparkles, AlertTriangle, CheckCircle2, Eye, Edit, Trash2, TestTube } from "lucide-react";
 import { toast } from "sonner";
 
 const createSchema = z.object({
-  name: z.string().min(1, "Policy name is required"),
-  policy: z.string().min(1, "Policy JSON is required"),
+  role: z.string().min(1, "Role is required"),
+  rule: z.string().min(1, "Policy rule (JSON) is required"),
+  description: z.string().default(""),
+  priority: z.number().default(0),
+  is_active: z.boolean().default(true),
 });
 
 type CreateForm = z.infer<typeof createSchema>;
@@ -32,6 +36,7 @@ export default function PoliciesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
+  const [testingPolicy, setTestingPolicy] = useState(false);
 
   const fetchPolicies = async () => {
     setLoading(true);
@@ -56,20 +61,58 @@ export default function PoliciesPage() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateForm>({
+  } = useForm({
     resolver: zodResolver(createSchema),
   });
 
   const onCreate = async (data: CreateForm) => {
     setError("");
     try {
-      const policyData = JSON.parse(data.policy);
-      await createPolicy({ name: data.name, document: policyData });
+      const ruleData = JSON.parse(data.rule);
+      await createPolicy({ 
+        role: data.role, 
+        rule: ruleData,
+        description: data.description,
+        priority: data.priority,
+        is_active: data.is_active
+      });
       toast.success("Policy created successfully");
       reset();
       fetchPolicies();
     } catch (e: any) {
-      setError(e?.message || "Failed to create policy (check policy JSON)");
+      setError(e?.message || "Failed to create policy (check rule JSON)");
+    }
+  };
+
+  const handleToggleActive = async (policy: Policy) => {
+    try {
+      await updatePolicy(policy.id, { is_active: !policy.is_active });
+      toast.success(`Policy ${policy.is_active ? 'deactivated' : 'activated'} successfully`);
+      fetchPolicies();
+    } catch (e: any) {
+      toast.error("Failed to update policy");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deletePolicy(id);
+      toast.success("Policy deleted successfully");
+      fetchPolicies();
+    } catch (e: any) {
+      toast.error("Failed to delete policy");
+    }
+  };
+
+  const handleTestPolicy = async (policy: Policy) => {
+    setTestingPolicy(true);
+    try {
+      const result = await testPolicy(policy.role, "read", "memory", { user_id: "test" });
+      toast.success(`Policy test result: ${JSON.stringify(result)}`);
+    } catch (e: any) {
+      toast.error("Policy test failed");
+    } finally {
+      setTestingPolicy(false);
     }
   };
 
@@ -92,13 +135,13 @@ export default function PoliciesPage() {
     }
   };
 
-  const getPolicyComplexity = (document: any) => {
-    if (!document) {
+  const getPolicyComplexity = (rule: any) => {
+    if (!rule) {
       return { level: 'Unknown', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400' };
     }
     
     try {
-      const str = JSON.stringify(document);
+      const str = JSON.stringify(rule);
       if (str.length < 500) return { level: 'Simple', color: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' };
       if (str.length < 1500) return { level: 'Medium', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' };
       return { level: 'Complex', color: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400' };
@@ -137,44 +180,67 @@ export default function PoliciesPage() {
                 Create New Policy
               </DialogTitle>
               <DialogDescription>
-                Define a new access control policy with JSON configuration
+                Define a new access control policy with JSON Logic rules
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit(onCreate)} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Policy Name</Label>
+                <Label htmlFor="role">Role</Label>
                 <Input
-                  id="name"
-                  {...register("name")}
-                  placeholder="e.g., Admin Access Policy"
+                  id="role"
+                  {...register("role")}
+                  placeholder="e.g., admin, user, agent"
                 />
-                {errors.name && (
-                  <p className="text-sm text-destructive">{errors.name.message}</p>
+                {errors.role && (
+                  <p className="text-sm text-destructive">{errors.role.message}</p>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="policy">Policy Configuration (JSON)</Label>
+                <Label htmlFor="description">Description</Label>
+                <Input
+                  id="description"
+                  {...register("description")}
+                  placeholder="Policy description (optional)"
+                />
+                {errors.description && (
+                  <p className="text-sm text-destructive">{errors.description.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Input
+                  id="priority"
+                  type="number"
+                  {...register("priority", { valueAsNumber: true })}
+                  placeholder="0"
+                  min="0"
+                  max="100"
+                />
+                {errors.priority && (
+                  <p className="text-sm text-destructive">{errors.priority.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rule">Policy Rule (JSON Logic)</Label>
                 <Textarea
-                  id="policy"
-                  {...register("policy")}
+                  id="rule"
+                  {...register("rule")}
                   rows={12}
                   className="font-mono text-sm"
                   placeholder={`{
-  "version": "1.0",
-  "rules": [
-    {
-      "action": "allow",
-      "resource": "*",
-      "conditions": {
-        "role": ["admin"]
-      }
-    }
+  "and": [
+    { "==": [{ "var": "user.role" }, "admin"] },
+    { "in": [{ "var": "action" }, ["read", "write", "delete"]] }
   ]
 }`}
                 />
-                {errors.policy && (
-                  <p className="text-sm text-destructive">{errors.policy.message}</p>
+                {errors.rule && (
+                  <p className="text-sm text-destructive">{errors.rule.message}</p>
                 )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch id="is_active" {...register("is_active")} />
+                <Label htmlFor="is_active">Active</Label>
               </div>
               {error && (
                 <Alert variant="destructive">
@@ -211,7 +277,7 @@ export default function PoliciesPage() {
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Active Policies</p>
-                <p className="text-2xl font-bold">{loading ? "--" : policies.length}</p>
+                <p className="text-2xl font-bold">{loading ? "--" : policies.filter(p => p.is_active).length}</p>
               </div>
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
                 <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
@@ -224,11 +290,11 @@ export default function PoliciesPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-                <p className="text-2xl font-bold">Today</p>
+                <p className="text-sm font-medium text-muted-foreground">Unique Roles</p>
+                <p className="text-2xl font-bold">{loading ? "--" : new Set(policies.map(p => p.role)).size}</p>
               </div>
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/20">
-                <Clock className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                <FileText className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </CardContent>
@@ -253,21 +319,21 @@ export default function PoliciesPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                Policy Registry
+                Access Control Policies
               </CardTitle>
               <CardDescription>
-                View and manage all access control policies in your system
+                Manage policies that control access to resources and actions
               </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="space-y-4">
-                  {Array.from({ length: 3 }).map((_, i) => (
+                  {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-4">
-                      <Skeleton className="h-12 w-12 rounded-lg" />
+                      <Skeleton className="h-10 w-10 rounded-full" />
                       <div className="space-y-2">
+                        <Skeleton className="h-4 w-[300px]" />
                         <Skeleton className="h-4 w-[200px]" />
-                        <Skeleton className="h-4 w-[150px]" />
                       </div>
                     </div>
                   ))}
@@ -282,23 +348,25 @@ export default function PoliciesPage() {
                 <div className="text-center py-12">
                   <Shield className="mx-auto h-12 w-12 text-muted-foreground/50" />
                   <h3 className="mt-4 text-lg font-semibold">No policies found</h3>
-                  <p className="text-muted-foreground">Get started by creating your first policy</p>
+                  <p className="text-muted-foreground">Create your first access control policy to get started</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Policy</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Complexity</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Priority</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>Complexity</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     <AnimatePresence>
                       {policies.map((policy) => {
-                        const complexity = getPolicyComplexity(policy.document);
+                        const complexity = getPolicyComplexity(policy.rule);
                         return (
                           <motion.tr
                             key={policy.id}
@@ -308,22 +376,25 @@ export default function PoliciesPage() {
                             className="group"
                           >
                             <TableCell>
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-r from-green-500 to-blue-600 text-white">
-                                  <Shield className="h-5 w-5" />
-                                </div>
-                                <div>
-                                  <p className="font-medium">{policy.name}</p>
-                                  <p className="text-sm text-muted-foreground font-mono">
-                                    {policy.id.slice(0, 8)}...
-                                  </p>
-                                </div>
+                              <div className="font-medium">{policy.role}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="max-w-xs truncate">
+                                {policy.description || "No description"}
                               </div>
                             </TableCell>
                             <TableCell>
+                              <Badge variant="outline">{policy.priority}</Badge>
+                            </TableCell>
+                            <TableCell>
                               <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{formatDate(policy.created_at)}</span>
+                                <Switch
+                                  checked={policy.is_active}
+                                  onCheckedChange={() => handleToggleActive(policy)}
+                                />
+                                <Badge className={policy.is_active ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400"}>
+                                  {policy.is_active ? "Active" : "Inactive"}
+                                </Badge>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -332,59 +403,38 @@ export default function PoliciesPage() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                                Active
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm">{formatDate(policy.created_at)}</span>
+                              </div>
                             </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="gap-2">
-                                      <Eye className="h-4 w-4" />
-                                      View Policy
-                                    </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-4xl">
-                                    <DialogHeader>
-                                      <DialogTitle className="flex items-center gap-2">
-                                        <Shield className="h-5 w-5" />
-                                        Policy Details
-                                      </DialogTitle>
-                                      <DialogDescription>
-                                        Configuration and metadata for {policy.name}
-                                      </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="space-y-4">
-                                      <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                          <span className="font-medium">Policy ID:</span>
-                                          <p className="font-mono text-muted-foreground">{policy.id}</p>
-                                        </div>
-                                        <div>
-                                          <span className="font-medium">Policy Name:</span>
-                                          <p className="text-muted-foreground">{policy.name}</p>
-                                        </div>
-                                        <div>
-                                          <span className="font-medium">Created:</span>
-                                          <p className="text-muted-foreground">{formatDate(policy.created_at)}</p>
-                                        </div>
-                                        <div>
-                                          <span className="font-medium">Complexity:</span>
-                                          <Badge className={complexity.color}>
-                                            {complexity.level}
-                                          </Badge>
-                                        </div>
-                                      </div>
-                                                                             <div>
-                                         <span className="font-medium text-sm">Policy Configuration:</span>
-                                         <pre className="mt-2 rounded-lg bg-muted p-4 text-xs overflow-auto max-h-96 whitespace-pre-wrap">
-                                            {policy.document ? JSON.stringify(policy.document, null, 2) : 'No policy document available'}
-                                         </pre>
-                                       </div>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
+                            <TableCell>
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTestPolicy(policy)}
+                                  disabled={testingPolicy}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <TestTube className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedPolicy(policy)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(policy.id)}
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </TableCell>
                           </motion.tr>
@@ -406,7 +456,7 @@ export default function PoliciesPage() {
                 Policy Analytics
               </CardTitle>
               <CardDescription>
-                Insights and usage patterns for your access control policies
+                Insights and patterns in your access control policies
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -419,6 +469,57 @@ export default function PoliciesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Policy Detail Dialog */}
+      <Dialog open={!!selectedPolicy} onOpenChange={() => setSelectedPolicy(null)}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              Policy Details
+            </DialogTitle>
+            <DialogDescription>
+              View detailed information about this access control policy
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPolicy && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Role</Label>
+                  <p className="text-sm text-muted-foreground">{selectedPolicy.role}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Priority</Label>
+                  <p className="text-sm text-muted-foreground">{selectedPolicy.priority}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Status</Label>
+                  <Badge className={selectedPolicy.is_active ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400"}>
+                    {selectedPolicy.is_active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Created</Label>
+                  <p className="text-sm text-muted-foreground">{formatDate(selectedPolicy.created_at)}</p>
+                </div>
+              </div>
+              {selectedPolicy.description && (
+                <div>
+                  <Label className="text-sm font-medium">Description</Label>
+                  <p className="text-sm text-muted-foreground">{selectedPolicy.description}</p>
+                </div>
+              )}
+              <div>
+                <Label className="text-sm font-medium">Policy Rule (JSON Logic)</Label>
+                <pre className="mt-2 text-xs bg-muted rounded-lg p-4 overflow-auto max-h-64">
+                  {JSON.stringify(selectedPolicy.rule, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
